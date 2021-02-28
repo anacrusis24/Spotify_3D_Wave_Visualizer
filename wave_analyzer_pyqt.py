@@ -1,4 +1,7 @@
-
+"""
+All code taken from Mark Jay's Audio Spectrum Analyzer Tutorial:
+https://github.com/markjay4k/Audio-Spectrum-Analyzer-in-Python
+"""
 import numpy as np
 from pyqtgraph.Qt import QtGui, QtCore
 import pyqtgraph as pg

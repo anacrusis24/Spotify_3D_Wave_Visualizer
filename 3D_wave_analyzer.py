@@ -1,4 +1,7 @@
 """
+All code taken from Mark Jay's Audio Spectrum Analyzer Tutorial:
+https://github.com/markjay4k/Audio-Spectrum-Analyzer-in-Python
+
 This creates a 3D mesh with perlin noise to simulate
 a terrain. The mesh is animated by shifting the noise
 to give a "fly-over" effect.
