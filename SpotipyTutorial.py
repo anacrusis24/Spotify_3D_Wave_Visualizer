@@ -1,5 +1,9 @@
 """
+Code taken from example here:
 https://github.com/plamere/spotipy/blob/master/examples/player.py
+
+Helpful startup tutorial here:
+https://www.section.io/engineering-education/spotify-python-part-1/
 """
 
 import spotipy
