@@ -1,0 +1,4 @@
+
+*.pyc
+.cache
+cred.py
