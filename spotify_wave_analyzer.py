@@ -21,7 +21,7 @@ import sys
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from pprint import pprint
-from time import sleep
+import time
 import cred
 
 
@@ -40,11 +40,11 @@ class Terrain(object):
         self.window.show()
 
         # constants and arrays
-        self.nsteps = 1.3
+        self.nsteps = 1.3  # Distance between each vertex
         self.offset = 0
         self.ypoints = np.arange(-20, 20 + self.nsteps, self.nsteps)
         self.xpoints = np.arange(-20, 20 + self.nsteps, self.nsteps)
-        self.nfaces = len(self.ypoints)
+        self.nfaces = len(self.ypoints)  # Number of faces
 
         self.RATE = 44100
         self.CHUNK = len(self.xpoints) * len(self.ypoints)
@@ -56,7 +56,7 @@ class Terrain(object):
             rate=self.RATE,
             input=True,
             output=True,
-            input_device_index=0,
+            input_device_index=2,
             frames_per_buffer=self.CHUNK,
         )
 
@@ -76,6 +76,9 @@ class Terrain(object):
         self.mesh1.setGLOptions('additive')
         self.window.addItem(self.mesh1)
 
+        self.start_time = time.time()
+        self.frames = 0
+
     def mesh(self, offset=0, height=2.5, wf_data=None):
 
         if wf_data is not None:
@@ -90,14 +93,14 @@ class Terrain(object):
 
         faces = []
         colors = []
-        verts = np.array([
-            [
+        verts = np.array([  # Each point is a list with x, y, and z (height)
+            [  # TODO: verify that the noise param (5) works
                 x, y, wf_data[xid][yid] * self.noise.noise2d(x=xid / 5 + offset, y=yid / 5 + offset)
             ] for xid, x in enumerate(self.xpoints) for yid, y in enumerate(self.ypoints)
         ], dtype=np.float32)
 
         for yid in range(self.nfaces - 1):
-            yoff = yid * self.nfaces
+            yoff = yid * self.nfaces  # offset, +nfaces to shift down one row
             for xid in range(self.nfaces - 1):
                 faces.append([
                     xid + yoff,
@@ -109,7 +112,7 @@ class Terrain(object):
                     xid + yoff + 1,
                     xid + yoff + self.nfaces + 1,
                 ])
-                colors.append([
+                colors.append([  #
                     xid / self.nfaces, 1 - xid / self.nfaces, yid / self.nfaces, 0.7
                 ])
                 colors.append([
@@ -125,6 +128,13 @@ class Terrain(object):
         """
         update the mesh and shift the noise each time
         """
+        self.frames += 1
+        if self.frames == 1000:
+            end_time = time.time()
+            duration = end_time - self.start_time
+            print('Frames = %f' % self.frames)
+            print('Duration = %f' % duration)
+            print('FPS = %d' % (self.frames / duration))
 
         wf_data = self.stream.read(self.CHUNK)
 
