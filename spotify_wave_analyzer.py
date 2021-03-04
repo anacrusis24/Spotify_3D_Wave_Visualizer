@@ -10,6 +10,9 @@ If you don't have pyOpenGL or opensimplex, then:
     - pip install opensimplex
 """
 
+import musicalbeeps
+
+
 import numpy as np
 from opensimplex import OpenSimplex
 import pyqtgraph.opengl as gl
@@ -26,7 +29,7 @@ import cred
 
 
 class Terrain(object):
-    def __init__(self):
+    def __init__(self, uri, metronome=False):
         """
         Initialize the graphics window and mesh surface
         """
@@ -79,6 +82,12 @@ class Terrain(object):
         self.start_time = time.time()
         self.frames = 0
 
+        self.uri = uri
+        self.beats = 0
+        self.tempo = sp.audio_features([uri])[0]['tempo']
+        self.player = musicalbeeps.Player(volume=0.3, mute_output = False)
+        self.metronome = metronome
+
     def mesh(self, offset=0, height=2.5, wf_data=None):
 
         if wf_data is not None:
@@ -87,6 +96,7 @@ class Terrain(object):
             wf_data = np.array(wf_data, dtype='int32') - 128
             wf_data = wf_data * 0.04
             wf_data = wf_data.reshape((len(self.xpoints), len(self.ypoints)))
+
         else:
             wf_data = np.array([1] * 1024)
             wf_data = wf_data.reshape((len(self.xpoints), len(self.ypoints)))
@@ -129,12 +139,16 @@ class Terrain(object):
         update the mesh and shift the noise each time
         """
         self.frames += 1
+        end_time = time.time()
+        duration = end_time - self.start_time
         if self.frames == 1000:
-            end_time = time.time()
-            duration = end_time - self.start_time
-            print('Frames = %f' % self.frames)
+            # print('Frames = %f' % self.frames)
             print('Duration = %f' % duration)
             print('FPS = %d' % (self.frames / duration))
+
+        if self.metronome and (np.floor(duration / 60 * self.tempo) > self.beats):
+            self.beats += 1
+            self.player.play_note("A", 0.1)
 
         wf_data = self.stream.read(self.CHUNK)
 
@@ -156,7 +170,7 @@ class Terrain(object):
         timer = QtCore.QTimer()
         timer.timeout.connect(self.update)
         timer.start(frametime)
-        sp.start_playback(uris=['spotify:track:7a9aeLVkn7DIqFjbanKz0k'])
+        sp.start_playback(uris=[self.uri])
 
         self.start()
 
@@ -164,5 +178,5 @@ scope = "user-read-playback-state,user-modify-playback-state"
 sp = spotipy.Spotify(client_credentials_manager=SpotifyOAuth(scope=scope))
 
 if __name__ == '__main__':
-    t = Terrain()
+    t = Terrain('spotify:track:7a9aeLVkn7DIqFjbanKz0k', True)
     t.animation()
