@@ -3,6 +3,7 @@ from spotipy.oauth2 import SpotifyOAuth
 import cred
 import Harmony as harm
 import time
+import musicalbeeps
 
 scope = "user-read-playback-state,user-modify-playback-state"
 sp = spotipy.Spotify(client_credentials_manager=SpotifyOAuth(scope=scope))
@@ -57,9 +58,33 @@ VI_chord = harmony.triad_harmony(harmony.scale[5])
 tswift_progression = [tonic_chord, major_dom_chord, VI_chord, IV_chord]
 i = 0
 
-while(True):
-    print(tswift_progression[i])
-    i += 1
-    if i == 4:
-        i = 0
-    time.sleep(time_per_measure)
+player = musicalbeeps.Player(volume = 0.3,
+                            mute_output = False)
+
+# while(True):
+#     print(tswift_progression[i])
+#     player.play_note(tswift_progression[i][0], time_per_measure)
+#     i += 1
+#     if i == 4:
+#         i = 0
+
+
+print(audio_features)
+
+
+
+# To play an A on default octave n°4 for 0.2 seconds
+player.play_note("A", 5)
+
+# # To play a G flat on octave n°3 for 2.5 seconds
+player.play_note("G3b", 2.5)
+
+# # To play a F sharp on octave n°5 for the default duration of 0.5 seconds
+player.play_note("F5#")
+
+analysis = sp.audio_analysis('spotify:track:7a9aeLVkn7DIqFjbanKz0k')
+# print(analysis['sections'])
+
+for section in analysis['sections']:
+    print(section['start'])
+    print(section['key'])
