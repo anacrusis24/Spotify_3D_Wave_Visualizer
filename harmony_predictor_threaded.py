@@ -64,7 +64,7 @@ player = musicalbeeps.Player(volume = 0.3, mute_output = False)
 
 def player_thread(chord, note):
     print('Player %d started' % note)
-    player.play_note(tswift_progression[chord][note], time_per_measure)
+    musicalbeeps.Player(volume=0.3, mute_output=False).play_note(tswift_progression[chord][note], time_per_measure)
 
 def conductor_thread():
     print('Conductor Started')
@@ -87,9 +87,6 @@ def conductor_thread():
 
 
 if __name__ == "__main__":
-    player = musicalbeeps.Player(volume=0.3,
-                                 mute_output=False)
-
     start_time = time.time()
 
     x = threading.Thread(target=conductor_thread)
