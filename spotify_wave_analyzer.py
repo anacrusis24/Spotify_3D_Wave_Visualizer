@@ -10,26 +10,113 @@ If you don't have pyOpenGL or opensimplex, then:
     - pip install opensimplex
 """
 
-import musicalbeeps
-
-
+# General imports
 import numpy as np
+import time
+import sys
+import struct
+import threading
+
+# 3D Graphing imports
 from opensimplex import OpenSimplex
 import pyqtgraph.opengl as gl
 from pyqtgraph.Qt import QtCore, QtGui
-import struct
-import pyaudio
-import sys
 
+# Music imports
+import pyaudio
+import musicalbeeps
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from pprint import pprint
-import time
-import cred
+import cred  # Imports secret credentials
+import Harmony  # Custom harmony generator
+
+
+class Progression:
+    def __init__(self, uri):
+        self.uri = uri
+        self.analysis = sp.audio_analysis(self.uri)
+
+        features = sp.audio_features(self.uri)[0]
+        self.song_time_signature = features['time_signature']
+        self.song_tempo = features['tempo']
+        self.song_key = [features['key']]
+        self.song_mode = [features['mode']]
+
+    def song_calculations(self):
+        """
+        Generates duration and number of measures per section
+        """
+        section_durations = []
+        list_keys = []
+        list_modes = []
+        section_tempos = []
+        section_time_signature = []
+
+        for section in self.analysis['sections']:
+            section_durations.append(section['duration'])
+            list_keys.append(section['key'])
+            list_modes.append(section['mode'])
+            section_tempos.append(section['tempo'])
+            section_time_signature.append(section['time_signature'])
+
+        section_durations = np.array(section_durations)
+        section_tempos = np.array(section_tempos)
+        section_time_signature = np.array(section_time_signature)
+        section_num_measures = section_durations * (section_tempos / 60) / section_time_signature
+
+        return section_durations, section_num_measures
+
+    def change_key(self, list_keys):
+        """
+        Translates Spotify key encodings into keys
+        """
+        key = {0: 'C', 1: 'C#', 2: 'D', 3: 'Eb', 4: 'E', 5: 'F', 6: 'F#', 7: 'G', 8: 'G#', 9: 'A', 10: 'Bb', 11: 'B'}
+        return [key.get(x, "No_key") for x in list_keys]
+
+    def change_mode(self, list_modes):
+        """
+        Translates Spotify mode encodings into major/minor
+        """
+        key = {0: 'Minor', 1: 'Major'}
+        return [key.get(x, "No_mode") for x in list_modes]
+
+    def player_thread(self, progression, chord, note, time_per_measure):
+        musicalbeeps.Player(volume=0.1, mute_output=False).play_note(progression[chord][note], time_per_measure)
+
+    def play(self, print=False):
+        """
+        Plays the Spotify song + harmonies
+        """
+        sp.start_playback(uris=[self.uri])
+
+        section_durations, section_num_measures = self.song_calculations()
+        for i in range(len(section_durations)):
+            harmony = Harmony.Harmony(self.change_key(self.song_key)[0], self.change_mode(self.song_mode)[0])
+            tonic_chord = harmony.triad_harmony(self.change_key(self.song_key)[0])
+            IV_chord = harmony.triad_harmony(harmony.scale[3])
+            major_dom_chord = harmony.triad_harmony(harmony.scale[4])
+            VI_chord = harmony.triad_harmony(harmony.scale[5])
+            progression = [tonic_chord, major_dom_chord, VI_chord, IV_chord]
+            time_per_measure = self.song_time_signature / self.song_tempo * 60 * 2
+
+            for j in range(int(section_num_measures[i])):
+                k = j
+                if k > len(progression) - 1:  # Restart
+                    k = j % len(progression)
+
+                threads = []
+                for note in range(len(progression[k])):
+                    player = threading.Thread(target=self.player_thread, args=(progression, k, note, time_per_measure))
+                    threads.append(player)
+                    player.start()
+                for thread in threads:
+                    thread.join()
+                if print:
+                    print(progression[k])
 
 
 class Terrain(object):
-    def __init__(self, uri, metronome=False):
+    def __init__(self, uri):
         """
         Initialize the graphics window and mesh surface
         """
@@ -83,10 +170,6 @@ class Terrain(object):
         self.frames = 0
 
         self.uri = uri
-        self.beats = 0
-        self.tempo = sp.audio_features([uri])[0]['tempo']
-        self.player = musicalbeeps.Player(volume=0.3, mute_output = False)
-        self.metronome = metronome
 
     def mesh(self, offset=0, height=2.5, wf_data=None):
 
@@ -136,19 +219,13 @@ class Terrain(object):
 
     def update(self):
         """
-        update the mesh and shift the noise each time
+        Update the mesh and shift the noise each time
         """
         self.frames += 1
         end_time = time.time()
         duration = end_time - self.start_time
         if self.frames == 1000:
-            # print('Frames = %f' % self.frames)
-            print('Duration = %f' % duration)
             print('FPS = %d' % (self.frames / duration))
-
-        if self.metronome and (np.floor(duration / 60 * self.tempo) > self.beats):
-            self.beats += 1
-            self.player.play_note("A", 0.1)
 
         wf_data = self.stream.read(self.CHUNK)
 
@@ -158,25 +235,35 @@ class Terrain(object):
 
     def start(self):
         """
-        get the graphics window open and setup
+        Gets the graphics window open and setup
         """
         if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
             QtGui.QApplication.instance().exec_()
 
-    def animation(self, frametime=10):
+    def animation(self, frame_time=10):
         """
-        calls the update method to run in a loop
+        Calls the update method to run in a loop
         """
         timer = QtCore.QTimer()
         timer.timeout.connect(self.update)
-        timer.start(frametime)
-        sp.start_playback(uris=[self.uri])
+        timer.start(frame_time)
 
+        harmonies = Progression(self.uri)
+        x = threading.Thread(target=harmonies.play)
+        x.start()
+
+        print('starting')
         self.start()
 
-scope = "user-read-playback-state,user-modify-playback-state"
-sp = spotipy.Spotify(client_credentials_manager=SpotifyOAuth(scope=scope))
 
 if __name__ == '__main__':
-    t = Terrain('spotify:track:7a9aeLVkn7DIqFjbanKz0k', True)
+    # Initiate connection to Spotify
+    scope = "user-read-playback-state,user-modify-playback-state"
+    sp = spotipy.Spotify(client_credentials_manager=SpotifyOAuth(scope=scope))
+
+    beatles = 'spotify:track:6dGnYIeXmHdcikdzNNDMm2'
+    pirates = 'spotify:track:7a9aeLVkn7DIqFjbanKz0k'
+    tswift = 'spotify:track:0sY6ZUTh4yoctD8VIXz339'
+    t = Terrain(tswift)
+
     t.animation()
