@@ -27,7 +27,7 @@ import pyaudio
 import musicalbeeps
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-import cred  # Imports secret credentials
+import cred  # Spotify secret credentials
 import Harmony  # Custom harmony generator
 
 
@@ -47,24 +47,19 @@ class Progression:
         Generates duration and number of measures per section
         """
         section_durations = []
-        list_keys = []
-        list_modes = []
-        section_tempos = []
-        section_time_signature = []
+        section_keys = []
+        section_modes = []
+        section_num_measures = []
 
         for section in self.analysis['sections']:
             section_durations.append(section['duration'])
-            list_keys.append(section['key'])
-            list_modes.append(section['mode'])
-            section_tempos.append(section['tempo'])
-            section_time_signature.append(section['time_signature'])
+            section_keys.append(section['key'])
+            section_modes.append(section['mode'])
+            section_num_measures.append(section['duration'] * section['tempo'] / 60 / section['time_signature'])
 
         section_durations = np.array(section_durations)
-        section_tempos = np.array(section_tempos)
-        section_time_signature = np.array(section_time_signature)
-        section_num_measures = section_durations * (section_tempos / 60) / section_time_signature
-
-        return section_durations, section_num_measures
+        section_num_measures = np.array(section_num_measures)
+        return section_durations, section_num_measures, section_keys, section_modes
 
     def change_key(self, list_keys):
         """
@@ -83,21 +78,29 @@ class Progression:
     def player_thread(self, progression, chord, note, time_per_measure):
         musicalbeeps.Player(volume=0.1, mute_output=False).play_note(progression[chord][note], time_per_measure)
 
-    def play(self, print=False):
+    def play(self, print_notes=False, use_sections=False):
         """
         Plays the Spotify song + harmonies
         """
         sp.start_playback(uris=[self.uri])
 
-        section_durations, section_num_measures = self.song_calculations()
+        section_durations, section_num_measures, section_keys, section_modes = self.song_calculations()
         for i in range(len(section_durations)):
-            harmony = Harmony.Harmony(self.change_key(self.song_key)[0], self.change_mode(self.song_mode)[0])
-            tonic_chord = harmony.triad_harmony(self.change_key(self.song_key)[0])
+            if use_sections:
+                key = self.change_key(section_keys)[i]
+                mode = self.change_mode(section_modes)[i]
+                time_per_measure = section_durations[i] / section_num_measures[i]
+            else:
+                key = self.change_key(self.song_key)[0]
+                mode = self.change_mode(self.song_mode)[0]
+                time_per_measure = self.song_time_signature / self.song_tempo * 60 * 2
+
+            harmony = Harmony.Harmony(key, mode)
+            tonic_chord = harmony.triad_harmony(key)
             IV_chord = harmony.triad_harmony(harmony.scale[3])
             major_dom_chord = harmony.triad_harmony(harmony.scale[4])
             VI_chord = harmony.triad_harmony(harmony.scale[5])
             progression = [tonic_chord, major_dom_chord, VI_chord, IV_chord]
-            time_per_measure = self.song_time_signature / self.song_tempo * 60 * 2
 
             for j in range(int(section_num_measures[i])):
                 k = j
@@ -111,7 +114,7 @@ class Progression:
                     player.start()
                 for thread in threads:
                     thread.join()
-                if print:
+                if print_notes:
                     print(progression[k])
 
 
