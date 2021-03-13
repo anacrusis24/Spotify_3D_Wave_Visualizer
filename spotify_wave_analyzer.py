@@ -76,16 +76,21 @@ class Progression:
         return [key.get(x, "No_mode") for x in list_modes]
 
     def player_thread(self, progression, chord, note, time_per_measure):
+        """
+        Plays a single note given a chord, note, and duration
+        """
         musicalbeeps.Player(volume=0.1, mute_output=False).play_note(progression[chord][note], time_per_measure)
 
     def play(self, print_notes=False, use_sections=False):
         """
         Plays the Spotify song + harmonies
         """
+        # Play song on Spotify Desktop
         sp.start_playback(uris=[self.uri])
 
+        # Play harmony using musicalbeeps
         section_durations, section_num_measures, section_keys, section_modes = self.song_calculations()
-        for i in range(len(section_durations)):
+        for i in range(len(section_durations)):  # If use_sections is true then loop by section, else one loop for song
             if use_sections:
                 key = self.change_key(section_keys)[i]
                 mode = self.change_mode(section_modes)[i]
@@ -123,7 +128,6 @@ class Terrain(object):
         """
         Initialize the graphics window and mesh surface
         """
-
         # setup the view window
         self.app = QtGui.QApplication(sys.argv)
         self.window = gl.GLViewWidget()
@@ -259,14 +263,16 @@ class Terrain(object):
         self.start()
 
 
+# List of songs to try
+beatles = 'spotify:track:6dGnYIeXmHdcikdzNNDMm2'
+pirates = 'spotify:track:7a9aeLVkn7DIqFjbanKz0k'
+tswift = 'spotify:track:0sY6ZUTh4yoctD8VIXz339'
+
 if __name__ == '__main__':
     # Initiate connection to Spotify
     scope = "user-read-playback-state,user-modify-playback-state"
     sp = spotipy.Spotify(client_credentials_manager=SpotifyOAuth(scope=scope))
 
-    beatles = 'spotify:track:6dGnYIeXmHdcikdzNNDMm2'
-    pirates = 'spotify:track:7a9aeLVkn7DIqFjbanKz0k'
-    tswift = 'spotify:track:0sY6ZUTh4yoctD8VIXz339'
+    # Start song and animation
     t = Terrain(tswift)
-
     t.animation()
