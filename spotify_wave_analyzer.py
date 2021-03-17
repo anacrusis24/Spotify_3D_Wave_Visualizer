@@ -20,7 +20,9 @@ import threading
 # 3D Graphing imports
 from opensimplex import OpenSimplex
 import pyqtgraph.opengl as gl
+import pyqtgraph as pg
 from pyqtgraph.Qt import QtCore, QtGui
+from scipy.fftpack import fft
 
 # Music imports
 import pyaudio
@@ -79,7 +81,7 @@ class Progression:
         """
         Plays a single note given a chord, note, and duration
         """
-        musicalbeeps.Player(volume=0.1, mute_output=False).play_note(progression[chord][note], time_per_measure)
+        musicalbeeps.Player(volume=0.3, mute_output=False).play_note(progression[chord][note], time_per_measure)
 
     def play(self, print_notes=False, use_sections=False):
         """
@@ -129,100 +131,74 @@ class Terrain(object):
         Initialize the graphics window and mesh surface
         """
         # setup the view window
+        # pyqtgraph stuff
+        pg.setConfigOptions(antialias=True)
+        self.traces = dict()
         self.app = QtGui.QApplication(sys.argv)
-        self.window = gl.GLViewWidget()
-        self.window.setWindowTitle('Terrain')
-        self.window.setGeometry(0, 110, 1920, 1080)
-        self.window.setCameraPosition(distance=30, elevation=12)
-        self.window.show()
+        self.win = pg.GraphicsWindow(title='Spectrum Analyzer')
+        self.win.setWindowTitle('Spectrum Analyzer')
+        self.win.setGeometry(5, 115, 1910, 1070)
 
-        # constants and arrays
-        self.nsteps = 1.3  # Distance between each vertex
-        self.offset = 0
-        self.ypoints = np.arange(-20, 20 + self.nsteps, self.nsteps)
-        self.xpoints = np.arange(-20, 20 + self.nsteps, self.nsteps)
-        self.nfaces = len(self.ypoints)  # Number of faces
+        wf_xlabels = [(0, '0'), (2048, '2048'), (4096, '4096')]
+        wf_xaxis = pg.AxisItem(orientation='bottom')
+        wf_xaxis.setTicks([wf_xlabels])
 
+        wf_ylabels = [(0, '0'), (127, '128'), (255, '255')]
+        wf_yaxis = pg.AxisItem(orientation='left')
+        wf_yaxis.setTicks([wf_ylabels])
+
+        sp_xlabels = [
+            (np.log10(10), '10'), (np.log10(100), '100'),
+            (np.log10(1000), '1000'), (np.log10(22050), '22050')
+        ]
+        sp_xaxis = pg.AxisItem(orientation='bottom')
+        sp_xaxis.setTicks([sp_xlabels])
+
+        self.waveform = self.win.addPlot(
+            title='WAVEFORM', row=1, col=1, axisItems={'bottom': wf_xaxis, 'left': wf_yaxis},
+        )
+        self.spectrum = self.win.addPlot(
+            title='SPECTRUM', row=2, col=1, axisItems={'bottom': sp_xaxis},
+        )
+
+        # pyaudio stuff
+        self.FORMAT = pyaudio.paInt16
+        self.CHANNELS = 1
         self.RATE = 44100
-        self.CHUNK = len(self.xpoints) * len(self.ypoints)
+        self.CHUNK = 1024 * 2
 
         self.p = pyaudio.PyAudio()
         self.stream = self.p.open(
-            format=pyaudio.paInt16,
-            channels=1,
+            format=self.FORMAT,
+            channels=self.CHANNELS,
             rate=self.RATE,
             input=True,
             output=True,
-            input_device_index=2,
             frames_per_buffer=self.CHUNK,
         )
-
-        # perlin noise object
-        self.noise = OpenSimplex()
-
-        # create the veritices array
-        verts, faces, colors = self.mesh()
-
-        self.mesh1 = gl.GLMeshItem(
-            faces=faces,
-            vertexes=verts,
-            faceColors=colors,
-            drawEdges=True,
-            smooth=False,
-        )
-        self.mesh1.setGLOptions('additive')
-        self.window.addItem(self.mesh1)
+        # waveform and spectrum x points
+        self.x = np.arange(0, 2 * self.CHUNK, 2)
+        self.f = np.linspace(0, self.RATE / 2, int(self.CHUNK / 2))
 
         self.start_time = time.time()
         self.frames = 0
 
         self.uri = uri
 
-    def mesh(self, offset=0, height=2.5, wf_data=None):
-
-        if wf_data is not None:
-            wf_data = struct.unpack(str(2 * self.CHUNK) + 'B', wf_data)
-            wf_data = np.array(wf_data, dtype='b')[::2] + 128
-            wf_data = np.array(wf_data, dtype='int32') - 128
-            wf_data = wf_data * 0.04
-            wf_data = wf_data.reshape((len(self.xpoints), len(self.ypoints)))
-
+    def set_plotdata(self, name, data_x, data_y):
+        if name in self.traces:
+            self.traces[name].setData(data_x, data_y)
         else:
-            wf_data = np.array([1] * 1024)
-            wf_data = wf_data.reshape((len(self.xpoints), len(self.ypoints)))
-
-        faces = []
-        colors = []
-        verts = np.array([  # Each point is a list with x, y, and z (height)
-            [  # TODO: verify that the noise param (5) works
-                x, y, wf_data[xid][yid] * self.noise.noise2d(x=xid / 5 + offset, y=yid / 5 + offset)
-            ] for xid, x in enumerate(self.xpoints) for yid, y in enumerate(self.ypoints)
-        ], dtype=np.float32)
-
-        for yid in range(self.nfaces - 1):
-            yoff = yid * self.nfaces  # offset, +nfaces to shift down one row
-            for xid in range(self.nfaces - 1):
-                faces.append([
-                    xid + yoff,
-                    xid + yoff + self.nfaces,
-                    xid + yoff + self.nfaces + 1,
-                ])
-                faces.append([
-                    xid + yoff,
-                    xid + yoff + 1,
-                    xid + yoff + self.nfaces + 1,
-                ])
-                colors.append([  #
-                    xid / self.nfaces, 1 - xid / self.nfaces, yid / self.nfaces, 0.7
-                ])
-                colors.append([
-                    xid / self.nfaces, 1 - xid / self.nfaces, yid / self.nfaces, 0.8
-                ])
-
-        faces = np.array(faces, dtype=np.uint32)
-        colors = np.array(colors, dtype=np.float32)
-
-        return verts, faces, colors
+            if name == 'waveform':
+                self.traces[name] = self.waveform.plot(pen='c', width=3)
+                self.waveform.setYRange(0, 255, padding=0)
+                self.waveform.setXRange(0, 2 * self.CHUNK, padding=0.005)
+            if name == 'spectrum':
+                self.traces[name] = self.spectrum.plot(pen='m', width=3)
+                self.spectrum.setLogMode(x=True, y=True)
+                self.spectrum.setYRange(-4, 0, padding=0)
+                self.spectrum.setXRange(
+                    np.log10(20), np.log10(self.RATE / 2), padding=0.005)
 
     def update(self):
         """
@@ -235,10 +211,15 @@ class Terrain(object):
             print('FPS = %d' % (self.frames / duration))
 
         wf_data = self.stream.read(self.CHUNK)
+        wf_data = struct.unpack(str(2 * self.CHUNK) + 'B', wf_data)
+        wf_data = np.array(wf_data, dtype='b')[::2] + 128
+        self.set_plotdata(name='waveform', data_x=self.x, data_y=wf_data, )
 
-        verts, faces, colors = self.mesh(offset=self.offset, wf_data=wf_data)
-        self.mesh1.setMeshData(vertexes=verts, faces=faces, faceColors=colors)
-        self.offset -= 0.05
+        sp_data = fft(np.array(wf_data, dtype='int8') - 128)
+        sp_data = np.abs(sp_data[0:int(self.CHUNK / 2)]
+                         ) * 2 / (128 * self.CHUNK)
+        self.set_plotdata(name='spectrum', data_x=self.f, data_y=sp_data)
+
 
     def start(self):
         """
@@ -274,5 +255,5 @@ if __name__ == '__main__':
     sp = spotipy.Spotify(client_credentials_manager=SpotifyOAuth(scope=scope))
 
     # Start song and animation
-    t = Terrain(tswift)
+    t = Terrain(pirates)
     t.animation()
