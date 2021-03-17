@@ -80,8 +80,29 @@ class Progression:
         key = {0: 'Minor', 1: 'Major'}
         return [key.get(x, "No_mode") for x in list_modes]
 
+    def make_progression(self, song_key_num, song_mode_num):
+        song_key = self.change_key(song_key_num)
+        song_mode = self.change_mode(song_mode_num)
+        harmony = Harmony.Harmony(song_key[0], song_mode[0][0])
+        progression = []
+
+        if song_mode == ['Major']:
+            tonic_chord = harmony.triad_harmony(song_key[0])
+            IV_chord = harmony.triad_harmony(harmony.scale[3])
+            dom_chord = harmony.triad_harmony(harmony.scale[4])
+            VI_chord = harmony.triad_harmony(harmony.scale[5])
+            progression = [tonic_chord, dom_chord, VI_chord, IV_chord]
+
+        elif song_mode == ['Minor']:
+            tonic_chord = harmony.triad_harmony(song_key[0])
+            III_chord = harmony.triad_harmony(harmony.scale[2])
+            VI_chord = harmony.triad_harmony(harmony.scale[5])
+            progression = [tonic_chord, III_chord, tonic_chord, VI_chord]
+
+        return progression
+
     def player_thread(self, progression, chord, note, time_per_measure):
-        musicalbeeps.Player(volume=0.1, mute_output=False).play_note(progression[chord][note], time_per_measure)
+        musicalbeeps.Player(volume=0.15, mute_output=False).play_note(progression[chord][note], time_per_measure)
 
     def play(self, print=False):
         """
@@ -91,12 +112,7 @@ class Progression:
 
         section_durations, section_num_measures = self.song_calculations()
         for i in range(len(section_durations)):
-            harmony = Harmony.Harmony(self.change_key(self.song_key)[0], self.change_mode(self.song_mode)[0])
-            tonic_chord = harmony.triad_harmony(self.change_key(self.song_key)[0])
-            IV_chord = harmony.triad_harmony(harmony.scale[3])
-            major_dom_chord = harmony.triad_harmony(harmony.scale[4])
-            VI_chord = harmony.triad_harmony(harmony.scale[5])
-            progression = [tonic_chord, major_dom_chord, VI_chord, IV_chord]
+            progression = self.make_progression(self.song_key, self.song_mode)
             time_per_measure = self.song_time_signature / self.song_tempo * 60 * 2
 
             for j in range(int(section_num_measures[i])):
